@@ -1,58 +1,89 @@
 package com.platymuus.bukkit.permissions;
 
-import org.bukkit.event.block.Action;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.*;
 import org.bukkit.event.player.*;
 
 /**
- * Player listener: takes care of registering and unregistering players on join
+ * Listen for player-based events to keep track of players and build permissions.
  */
-class PlayerListener extends org.bukkit.event.player.PlayerListener {
+class PlayerListener implements Listener {
 
     private PermissionsPlugin plugin;
 
     public PlayerListener(PermissionsPlugin plugin) {
         this.plugin = plugin;
     }
+    
+    // Keep track of player's world
 
-    @Override
-    public void onPlayerJoin(PlayerJoinEvent event) {
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onWorldChange(PlayerChangedWorldEvent event) {
+        plugin.calculateAttachment(event.getPlayer());
+    }
+    
+    // Register players when needed
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerLogin(PlayerJoinEvent event) {
         plugin.debug("Player " + event.getPlayer().getName() + " joined, registering...");
         plugin.registerPlayer(event.getPlayer());
     }
 
-    @Override
+    // Unregister players when needed
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerKick(PlayerKickEvent event) {
+        if (event.isCancelled()) return;
+        plugin.debug("Player " + event.getPlayer().getName() + " was kicked, unregistering...");
+        plugin.unregisterPlayer(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerQuit(PlayerQuitEvent event) {
         plugin.debug("Player " + event.getPlayer().getName() + " quit, unregistering...");
         plugin.unregisterPlayer(event.getPlayer());
     }
+    
+    // Prevent doing things in the event of permissions.build: false
 
-    @Override
-    public void onPlayerKick(PlayerKickEvent event) {
-        plugin.debug("Player " + event.getPlayer().getName() + " was kicked, unregistering...");
-        plugin.unregisterPlayer(event.getPlayer());
-    }
-    
-    @Override
-    public void onPlayerMove(PlayerMoveEvent event) {
-        plugin.setLastWorld(event.getPlayer().getName(), event.getTo().getWorld().getName());
-    }
-    
-    @Override
-    public void onPlayerTeleport(PlayerTeleportEvent event) {
-        plugin.setLastWorld(event.getPlayer().getName(), event.getTo().getWorld().getName());
-    }
-    
-    @Override
+    @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.isCancelled()) return;
         if (event.getAction() == Action.LEFT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_AIR) {
             return;
         }
-        if (!event.getPlayer().isOp() && !event.getPlayer().hasPermission("permissions.build")) {
-            if (event.getAction() != Action.PHYSICAL && plugin.getConfiguration().getString("messages.build", "").length() > 0) {
-                String message = plugin.getConfiguration().getString("messages.build", "").replace('&', '\u00A7');
-                event.getPlayer().sendMessage(message);
-            }
+        if (!event.getPlayer().hasPermission("permissions.build")) {
+            bother(event.getPlayer());
             event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        if (event.isCancelled()) return;
+        if (!event.getPlayer().hasPermission("permissions.build")) {
+            bother(event.getPlayer());
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (event.isCancelled()) return;
+        if (!event.getPlayer().hasPermission("permissions.build")) {
+            bother(event.getPlayer());
+            event.setCancelled(true);
+        }
+    }
+    
+    private void bother(Player player) {
+        if (plugin.getConfig().getString("messages.build", "").length() > 0) {
+            String message = plugin.getConfig().getString("messages.build", "").replace('&', '\u00A7');
+            player.sendMessage(message);
         }
     }
 
